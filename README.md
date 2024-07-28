@@ -2,6 +2,16 @@
 
 yaR is an open-source AI wearable device designed to assist visually impaired individuals in navigating the world with greater confidence and independence.
 
+## Table of Contents
+- [Project Overview](#project-overview)
+- [Key Features](#key-features)
+- [Repository Structure](#repository-structure)
+- [Getting Started](#getting-started)
+  - [Server Setup](#server-setup)
+  - [Raspberry Pi Client Setup](#raspberry-pi-client-setup)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Project Overview
 
 yaR started as a hackathon project and has evolved into a sophisticated AI-powered pendant. It uses a Raspberry Pi to capture visual input and process it to provide audio feedback to the user.
@@ -41,24 +51,59 @@ The repository is organized into two main folders:
 
 ## Getting Started
 
-### Server
+### Server Setup
 
-- Create a virtual environment and install the required Python packages using `pip install -r requirements.txt`.
-- The following environment variables are required:
-    - `OPENAI_API_KEY` - OpenAI API key
-    - `ANTHROPIC_API_KEY` - Anthropic API key
-- <Enter instructions on firebase credentials>
-- Take note of the server's IP address/ domain and add it to the `ALLOWED_HOSTS` list in the [settings file](./Server/server/settings.py).
-- Run the Django server using `python manage.py runserver 0.0.0.0:8000`.
-- The server is now ready to receive requests from the Raspberry Pi client.
+1. Create a virtual environment and install the required Python packages:
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+   pip install -r requirements.txt
+   ```
 
+2. Set up environment variables:
+   - `OPENAI_API_KEY`: OpenAI API key
+   - `ANTHROPIC_API_KEY`: Anthropic API key
 
-### Raspberry Client 
+3. Firebase Credentials Setup:
+   - Create a new Firebase project in the [Firebase Console](https://console.firebase.google.com/)
+   - Generate a new private key:
+     - Go to Project Settings > Service Accounts
+     - Click "Generate new private key"
+   - Rename the downloaded JSON file to `yar-v2.json`
+   - Move `yar-v2.json` to the `video_processing` folder
 
-- Set up the Raspberry Pi with the required hardware as per the instructions in the `Hardware Guide` (coming soon). 
-- Install the required Python packages on the Raspberry Pi using `pip3 install -r requirements.txt`.
-- The following environment variables are required:
-    - `VIDEO_PROCESSING_URL` - URL/ IP address of the above server
-    - `API_TOKEN` - API token for the server. This token is synonymous to an identity token associated with each raspberry pi board. Currently, whenever the server receives a new token, it will create a new `board` in the firestore database. This is written in the [firebase utils file](./Server/video_processing/utils/firebase_utils.py). It should be changed to a more secure method in the future. For now, use a random string such as `1234`.
-- Run the `main.py` script to start the client.
+   **Important:** Keep `yar-v2.json` secure and never expose it publicly.
 
+4. Configure Django:
+   - Add the server's IP address/domain to `ALLOWED_HOSTS` in `Server/server/settings.py`
+
+5. Run the Django server:
+   ```
+   python manage.py runserver 0.0.0.0:8000
+   ```
+
+### Raspberry Pi Client Setup
+
+1. Set up the Raspberry Pi hardware (Hardware Guide coming soon)
+
+2. Install required Python packages:
+   ```
+   pip3 install -r requirements.txt
+   ```
+
+3. Set up environment variables:
+   - `VIDEO_PROCESSING_URL`: URL/IP address of the server
+   - `API_TOKEN`: API token for the server (e.g., "1234")
+
+4. Run the client:
+   ```
+   python main.py
+   ```
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for more details.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
