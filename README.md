@@ -9,7 +9,6 @@ yaR is an open-source AI wearable device designed to assist visually impaired in
 - [Getting Started](#getting-started)
   - [Server Setup](#server-setup)
   - [Raspberry Pi Client Setup](#raspberry-pi-client-setup)
-- [Contributing](#contributing)
 - [License](#license)
 
 ## Project Overview
@@ -99,10 +98,6 @@ The repository is organized into two main folders:
    ```
    python main.py
    ```
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for more details.
 
 ## License
 
