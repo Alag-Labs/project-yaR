@@ -17,6 +17,7 @@ from .utils import (
     add_query_to_board,
     get_time,
     extract_and_find_least_blurry_frame,
+    extract_audio,
 )
 from .utils.Logger import Logger
 
@@ -44,8 +45,7 @@ def upload_video(request):
 
     # Validate presence of both video and audio files
     video_file = request.FILES.get("video")
-    audio_file = request.FILES.get("audio")
-    if not video_file or not audio_file:
+    if not video_file:
         logger.error("Video and audio are required")
         return HttpResponse({"message": "Video and audio are required"}, status=400)
 
@@ -54,13 +54,11 @@ def upload_video(request):
 
     try:
         # Save incoming files
-        video_file_path, audio_file_path = save_files(
-            video_file, audio_file, board_token, logger, start_time
-        )
+        video_file_path = save_files(video_file, board_token, logger, start_time)
 
         # Process files to extract information
-        least_blurry_frame, transcript, vision_response = process_files(
-            video_file_path, audio_file_path, logger
+        least_blurry_frame, transcript, vision_response, audio_file_path = (
+            process_files(video_file_path, logger)
         )
 
         # Convert the vision response to speech
@@ -89,39 +87,34 @@ def upload_video(request):
         return HttpResponse({"message": "An error occurred"}, status=500)
 
 
-def save_files(video_file, audio_file, board_token, logger, start_time):
+def save_files(video_file, board_token, logger, start_time):
     """
     Save the uploaded video and audio files.
 
     Args:
         video_file (File): The uploaded video file.
-        audio_file (File): The uploaded audio file.
         board_token (str): The board token for identification.
         logger (Logger): The logger instance for logging events.
         start_time (float): The start time of the overall process.
 
     Returns:
-        tuple: Paths of the saved video and audio files.
+        tuple: Path of the saved video file
     """
     video_file_path = save_video_file(video_file, board_token)
     logger.info(f"Video file saved, Time taken: {get_time(start_time)}")
 
-    audio_file_path = save_audio_file(audio_file, board_token)
-    logger.info(f"Audio file saved, Time taken: {get_time(start_time)}")
-
-    return video_file_path, audio_file_path
+    return video_file_path
 
 
-def process_files(video_file_path, audio_file_path, logger):
+def process_files(video_file_path, logger):
     """
-    Process the video and audio files concurrently.
+    Process the video file concurrently.
 
     This function extracts the least blurry frame from the video,
-    converts speech to text, and generates a vision response.
+    extracts audio, converts speech to text, and generates a vision response.
 
     Args:
         video_file_path (str): Path to the saved video file.
-        audio_file_path (str): Path to the saved audio file.
         logger (Logger): The logger instance for logging events.
 
     Returns:
@@ -132,13 +125,18 @@ def process_files(video_file_path, audio_file_path, logger):
         future_frame = executor.submit(
             extract_and_find_least_blurry_frame, video_file_path
         )
-        # Convert speech to text
-        future_transcript = executor.submit(convert_speech_to_text, audio_file_path)
+        # Extract audio from video
+        future_audio = executor.submit(extract_audio, video_file_path)
+        logger.info(f"Extracted audio, Time taken: {get_time(time.time())}")
 
         least_blurry_frame = future_frame.result()
         logger.info(f"Least blurry frame found, Time taken: {get_time(time.time())}")
 
-        transcript = future_transcript.result()
+        audio_file_path = future_audio.result()
+        logger.info(f"Audio extracted, Time taken: {get_time(time.time())}")
+
+        # Convert speech to text
+        transcript = convert_speech_to_text(audio_file_path)
         logger.info(f"Transcript made, Time taken: {get_time(time.time())}")
 
         # Generate vision response based on the frame and transcript
@@ -147,7 +145,7 @@ def process_files(video_file_path, audio_file_path, logger):
         ).result()
         logger.info(f"Vision response generated, Time taken: {get_time(time.time())}")
 
-    return least_blurry_frame, transcript, vision_response
+    return least_blurry_frame, transcript, vision_response, audio_file_path
 
 
 def save_image_and_query(
