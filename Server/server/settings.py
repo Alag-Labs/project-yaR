@@ -18,7 +18,6 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -29,8 +28,6 @@ SECRET_KEY = "django-insecure-fyu3ti*4fh%c4k#s%xxnj_x&7&5t8t$9%!ij&4x!y!7wbc(=01
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    "ec2-43-204-30-112.ap-south-1.compute.amazonaws.com",
-    "43.204.30.112" "localhost",
     "127.0.0.1",
 ]
 

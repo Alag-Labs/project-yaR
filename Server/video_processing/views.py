@@ -23,12 +23,12 @@ from .utils.Logger import Logger
 
 
 @csrf_exempt
-def upload_video(request):
+def unified_upload_video(request):
     """
-    Main view function to handle video upload, processing, and response generation.
+    Unified view function to handle video upload from both RPi and Android devices.
 
-    This function orchestrates the entire process of receiving video and audio files,
-    processing them, generating a response, and initiating background tasks.
+    This function determines the device type based on a header and processes
+    the upload accordingly, handling audio extraction or separate audio files.
     """
     logger = Logger(log_to_file=True)
 
@@ -43,22 +43,50 @@ def upload_video(request):
         logger.error("Token is required")
         return HttpResponse({"message": "Token is required"}, status=400)
 
-    # Validate presence of both video and audio files
+    # Determine device type from header
+    device_type = request.headers.get("X-Device-Type", "").lower()
+    if device_type not in ["rpi", "android"]:
+        logger.error("Invalid or missing X-Device-Type header")
+        return HttpResponse(
+            {"message": "Invalid or missing X-Device-Type header"}, status=400
+        )
+
+    # Validate presence of video file
     video_file = request.FILES.get("video")
     if not video_file:
-        logger.error("Video and audio are required")
-        return HttpResponse({"message": "Video and audio are required"}, status=400)
+        logger.error("Video file is required")
+        return HttpResponse({"message": "Video file is required"}, status=400)
+
+    # For RPi, check for separate audio file
+    if device_type == "rpi":
+        audio_file = request.FILES.get("audio")
+        if not audio_file:
+            logger.error("Audio file is required for RPi uploads")
+            return HttpResponse(
+                {"message": "Audio file is required for RPi uploads"}, status=400
+            )
 
     start_time = time.time()
-    logger.info(f"Received video and audio files - Timer started at {start_time}")
+    logger.info(f"Received upload from {device_type} - Timer started at {start_time}")
 
     try:
-        # Save incoming files
-        video_file_path = save_files(video_file, board_token, logger, start_time)
+        # Save video file
+        video_file_path = save_video_file(video_file, board_token)
+        logger.info(f"Video file saved, Time taken: {get_time(start_time)}")
+
+        # Process audio based on device type
+        if device_type == "android":
+            audio_file_path = extract_audio(video_file_path)
+            logger.info(
+                f"Audio extracted from video, Time taken: {get_time(start_time)}"
+            )
+        else:  # RPi
+            audio_file_path = save_audio_file(audio_file, board_token)
+            logger.info(f"Audio file saved, Time taken: {get_time(start_time)}")
 
         # Process files to extract information
-        least_blurry_frame, transcript, vision_response, audio_file_path = (
-            process_files(video_file_path, logger)
+        least_blurry_frame, transcript, vision_response = process_files(
+            video_file_path, audio_file_path, logger, start_time
         )
 
         # Convert the vision response to speech
@@ -83,70 +111,46 @@ def upload_video(request):
 
         return response
     except Exception as e:
-        logger.error(f"Error in upload_video: {e}")
+        logger.error(f"Error in unified_upload_video: {e}")
         return HttpResponse({"message": "An error occurred"}, status=500)
 
 
-def save_files(video_file, board_token, logger, start_time):
+def process_files(video_file_path, audio_file_path, logger, start_time):
     """
-    Save the uploaded video and audio files.
+    Process the video and audio files concurrently.
+
+    This function extracts the least blurry frame from the video,
+    converts speech to text, and generates a vision response.
 
     Args:
-        video_file (File): The uploaded video file.
-        board_token (str): The board token for identification.
+        video_file_path (str): Path to the saved video file.
+        audio_file_path (str): Path to the audio file (extracted or uploaded).
         logger (Logger): The logger instance for logging events.
         start_time (float): The start time of the overall process.
 
     Returns:
-        tuple: Path of the saved video file
-    """
-    video_file_path = save_video_file(video_file, board_token)
-    logger.info(f"Video file saved, Time taken: {get_time(start_time)}")
-
-    return video_file_path
-
-
-def process_files(video_file_path, logger):
-    """
-    Process the video file concurrently.
-
-    This function extracts the least blurry frame from the video,
-    extracts audio, converts speech to text, and generates a vision response.
-
-    Args:
-        video_file_path (str): Path to the saved video file.
-        logger (Logger): The logger instance for logging events.
-
-    Returns:
         tuple: The least blurry frame, transcript, and vision response.
     """
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         # Extract least blurry frame from video
         future_frame = executor.submit(
             extract_and_find_least_blurry_frame, video_file_path
         )
-        # Extract audio from video
-        future_audio = executor.submit(extract_audio, video_file_path)
-        logger.info(f"Extracted audio, Time taken: {get_time(time.time())}")
-
-        least_blurry_frame = future_frame.result()
-        logger.info(f"Least blurry frame found, Time taken: {get_time(time.time())}")
-
-        audio_file_path = future_audio.result()
-        logger.info(f"Audio extracted, Time taken: {get_time(time.time())}")
 
         # Convert speech to text
-        transcript = convert_speech_to_text(audio_file_path)
-        logger.info(f"Transcript made, Time taken: {get_time(time.time())}")
+        future_transcript = executor.submit(convert_speech_to_text, audio_file_path)
+
+        least_blurry_frame = future_frame.result()
+        logger.info(f"Least blurry frame found, Time taken: {get_time(start_time)}")
+
+        transcript = future_transcript.result()
+        logger.info(f"Transcript made, Time taken: {get_time(start_time)}")
 
         # Generate vision response based on the frame and transcript
-        vision_response = executor.submit(
-            image_to_text, least_blurry_frame, transcript
-        ).result()
-        logger.info(f"Vision response generated, Time taken: {get_time(time.time())}")
+        vision_response = image_to_text(least_blurry_frame, transcript)
+        logger.info(f"Vision response generated, Time taken: {get_time(start_time)}")
 
-    return least_blurry_frame, transcript, vision_response, audio_file_path
-
+    return least_blurry_frame, transcript, vision_response
 
 def save_image_and_query(
     least_blurry_frame,
