@@ -7,18 +7,7 @@ from django.http import StreamingHttpResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from .config.firebase_config import firestore
-from .utils import (
-    save_audio_file,
-    save_video_file,
-    convert_speech_to_text,
-    upload_image_to_storage,
-    image_to_text,
-    convert_text_to_speech,
-    add_query_to_board,
-    get_time,
-    extract_and_find_least_blurry_frame,
-    extract_audio,
-)
+from .utils import *
 from .utils.Logger import Logger
 
 
@@ -45,17 +34,18 @@ def unified_upload_video(request):
 
     # Determine device type from header
     device_type = request.headers.get("X-Device-Type", "").lower()
-    if device_type not in ["rpi", "android"]:
+    if device_type not in ["rpi", "android", "android_v2"]:
         logger.error("Invalid or missing X-Device-Type header")
         return HttpResponse(
             {"message": "Invalid or missing X-Device-Type header"}, status=400
         )
 
     # Validate presence of video file
-    video_file = request.FILES.get("video")
-    if not video_file:
-        logger.error("Video file is required")
-        return HttpResponse({"message": "Video file is required"}, status=400)
+    if device_type == "android" or device_type == "rpi":
+        video_file = request.FILES.get("video")
+        if not video_file:
+            logger.error("Video file is required")
+            return HttpResponse({"message": "Video file is required"}, status=400)
 
     # For RPi, check for separate audio file
     if device_type == "rpi":
@@ -68,6 +58,40 @@ def unified_upload_video(request):
 
     start_time = time.time()
     logger.info(f"Received upload from {device_type} - Timer started at {start_time}")
+
+    # For android_v2 device type, get the image and audio files
+    if device_type == "android_v2":
+        image_file = request.FILES.get("image")
+        audio_file = request.FILES.get("audio")
+        if not image_file or not audio_file:
+            logger.error("Image and audio files are required for Android uploads")
+            return HttpResponse(
+                {"message": "Image and audio files are required for Android uploads"},
+                status=400,
+            )
+
+        least_blurry_frame = save_image_file(image_file, board_token)
+        saved_audio_path = save_audio_file(audio_file, board_token)
+        transcript = convert_speech_to_text(saved_audio_path)
+        vision_response = image_to_text(least_blurry_frame, transcript)
+        audio_stream = convert_text_to_speech(vision_response, board_token)
+
+        response = StreamingHttpResponse(audio_stream, content_type="audio/mpeg")
+
+        threading.Thread(
+            target=save_image_and_query,
+            args=(
+                least_blurry_frame,
+                board_token,
+                transcript,
+                vision_response,
+                None,
+                None,
+                logger,
+            ),
+        ).start()
+
+        return response
 
     try:
         # Save video file

@@ -51,3 +51,29 @@ def save_audio_file(uploaded_audio, board_token, directory="audio"):
             wf.write(chunk)
     
     return audio_file_path
+
+def save_image_file(image_file, board_token, directory="images"):
+    """
+    Save an uploaded image file to a specified directory.
+
+    Args:
+        image_file (UploadedFile): The uploaded image file object.
+        board_token (str): A unique identifier for the board, used in the filename.
+        directory (str): The directory to save the file. Defaults to "images".
+
+    Returns:
+        str: The path to the saved image file.
+    """
+    # Create the directory if it doesn't exist
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    
+    # Generate the file path
+    image_file_path = os.path.join(directory, f"image-{board_token}.jpg")
+    
+    # Save the file
+    with open(image_file_path, "wb") as f:
+        for chunk in image_file.chunks():
+            f.write(chunk)
+    
+    return image_file_path
